@@ -12,10 +12,18 @@ class SerialHistogram(QtWidgets.QWidget):
         self.time_differences = deque(maxlen=100000)
 
         self.maxXRange = 1000  # Default max X-axis range
+        self.numBins = 20 # Default number of bins
         self.setupUi()
         self.setupSerial()
 
     def setupUi(self):
+        button_style = ("QPushButton {"
+                        "background-color: #FFFFFF;"
+                        "color: #374c80;"
+                        "border-radius: 5px;"
+                        "padding: 6px;"
+                        "}")
+
         self.layout = QtWidgets.QVBoxLayout()
         self.setLayout(self.layout)
 
@@ -24,21 +32,20 @@ class SerialHistogram(QtWidgets.QWidget):
         self.plotWidget.setTitle("Histogram of Time Between Detections")
         self.plotWidget.showGrid(x=True, y=True)
 
-        # Button for changing the X-axis range
+        # Changing X-axis range
         self.changeXAxisButton = QtWidgets.QPushButton("Change X-axis Range")
         self.layout.addWidget(self.changeXAxisButton)
-        self.changeXAxisButton.setStyleSheet("QPushButton {"
-                                         "background-color: #FFFFFF;"
-                                         "color: #000000;"
-                                         "border-radius: 5px;"
-                                         "padding: 6px;"
-                                         "}")
+        self.changeXAxisButton.setStyleSheet(button_style)
+        self.changeXAxisButton.clicked.connect(self.changeXAxisRange)
+
+        # Changing number of bins
+        self.changeBinsButton = QtWidgets.QPushButton("Change Number of Bins")
+        self.layout.addWidget(self.changeBinsButton)
+        self.changeBinsButton.setStyleSheet(button_style)
+        self.changeBinsButton.clicked.connect(self.changeNumberOfBins)
 
         self.changeXAxisButton.clicked.connect(self.changeXAxisRange)
         self.plotWidget.setBackground('#FFFFFF')
-
-
-
 
     def setupSerial(self):
         self.timer = pg.QtCore.QTimer()
@@ -56,7 +63,7 @@ class SerialHistogram(QtWidgets.QWidget):
             print(f"Error: {e}")
 
         if len(self.time_differences) > 0:
-            y, x = np.histogram(list(self.time_differences), bins=20, range=(0, self.maxXRange))
+            y, x = np.histogram(list(self.time_differences), bins=self.numBins, range=(0, self.maxXRange))
             self.plotWidget.clear()
             self.plotWidget.plot(x, y, stepMode=True, fillLevel=0, brush=pg.mkBrush('#374c80'))
 
@@ -65,6 +72,12 @@ class SerialHistogram(QtWidgets.QWidget):
         if ok:
             self.maxXRange = maxXRange
             self.updateHistogram()  # Update histogram to reflect new X-axis range immediately
+
+    def changeNumberOfBins(self):
+        numBins, ok = QtWidgets.QInputDialog.getInt(self, "Change Number of Bins", "Enter new number of bins:", value=self.numBins, min=1)
+        if ok:
+            self.numBins = numBins
+            self.updateHistogram()  # Update histogram to reflect new number of bins immediately
 
 if __name__ == '__main__':
     app = QtWidgets.QApplication(sys.argv)
