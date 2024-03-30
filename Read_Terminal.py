@@ -5,11 +5,13 @@ import pyqtgraph as pg
 from PyQt5 import QtWidgets, QtGui, QtCore
 from collections import deque
 
+
 class SerialHistogram(QtWidgets.QWidget):
     def __init__(self, port, baudrate=9600, parent=None):
         super(SerialHistogram, self).__init__(parent)
         self.serial_port = serial.Serial(port, baudrate)
         self.time_differences = deque(maxlen=100000)
+        self.detection_times = deque(maxlen=100000)
 
         self.maxXRange = 1000  # Default max X-axis range
         self.numBins = 20 # Default number of bins
@@ -17,6 +19,9 @@ class SerialHistogram(QtWidgets.QWidget):
         self.setupSerial()
 
     def setupUi(self):
+        self.layout = QtWidgets.QVBoxLayout()
+        self.setLayout(self.layout)
+
         button_style = ("QPushButton {"
                         "background-color: #FFFFFF;"
                         "color: #374c80;"
@@ -24,28 +29,27 @@ class SerialHistogram(QtWidgets.QWidget):
                         "padding: 6px;"
                         "}")
 
-        self.layout = QtWidgets.QVBoxLayout()
-        self.setLayout(self.layout)
-
+        # Plot
         self.plotWidget = pg.PlotWidget()
         self.layout.addWidget(self.plotWidget)
         self.plotWidget.setTitle("Histogram of Time Between Detections")
         self.plotWidget.showGrid(x=True, y=True)
+        self.plotWidget.setBackground('#FFFFFF')
 
-        # Changing X-axis range
+        # Button X-axis range
         self.changeXAxisButton = QtWidgets.QPushButton("Change X-axis Range")
         self.layout.addWidget(self.changeXAxisButton)
         self.changeXAxisButton.setStyleSheet(button_style)
         self.changeXAxisButton.clicked.connect(self.changeXAxisRange)
 
-        # Changing number of bins
+        # Button number of bins
         self.changeBinsButton = QtWidgets.QPushButton("Change Number of Bins")
         self.layout.addWidget(self.changeBinsButton)
         self.changeBinsButton.setStyleSheet(button_style)
         self.changeBinsButton.clicked.connect(self.changeNumberOfBins)
 
         self.changeXAxisButton.clicked.connect(self.changeXAxisRange)
-        self.plotWidget.setBackground('#FFFFFF')
+
 
     def setupSerial(self):
         self.timer = pg.QtCore.QTimer()
