@@ -119,8 +119,8 @@ class SerialHistogram(QtWidgets.QWidget):
 
         if len(self.time_differences) > 0:
             y, x = np.histogram(list(self.time_differences), bins=self.numBins, range=(25, self.maxXRange))
-            self.plotWidget.clear()
-            self.plotWidget.plot(x, y, stepMode=True, fillLevel=0, brush=pg.mkBrush('#374c80'))
+            self.exponentialPlotWidget.clear()
+            self.exponentialPlotWidget.plot(x, y, stepMode=True, fillLevel=0, brush=pg.mkBrush('#374c80'))
 
     def changeXAxisRange(self):
         maxXRange, ok = QtWidgets.QInputDialog.getInt(self, "Change X-axis Range", "Enter new max X-axis value (ms):", value=self.maxXRange, min=500)
@@ -136,7 +136,7 @@ class SerialHistogram(QtWidgets.QWidget):
 
     def clearPlot(self):
         """Clear the plot and the underlying data."""
-        self.plotWidget.clear()  # This clears the visual plot
+        self.exponentialPlotWidget.clear()  # This clears the visual plot
         self.time_differences.clear()
 
     def savePlot(self):
@@ -144,7 +144,7 @@ class SerialHistogram(QtWidgets.QWidget):
         # Define the file name and format. For example, 'histogram.png'
         fileName, _ = QtWidgets.QFileDialog.getSaveFileName(self, "Save Plot", "", "PNG Image (*.png);;All Files (*)")
         if fileName:
-            exporter = pg.exporters.ImageExporter(self.plotWidget.plotItem)
+            exporter = pg.exporters.ImageExporter(self.exponentialPlotWidget.plotItem)
             exporter.export(fileName)
 
 if __name__ == '__main__':
