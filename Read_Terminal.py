@@ -5,13 +5,13 @@ import pyqtgraph as pg
 from PyQt5 import QtWidgets, QtGui, QtCore
 from collections import deque
 
+#from MouseHover import CustomPlotWidget
 
 class SerialHistogram(QtWidgets.QWidget):
     def __init__(self, port, baudrate=9600, parent=None):
         super(SerialHistogram, self).__init__(parent)
         self.serial_port = serial.Serial(port, baudrate)
         self.time_differences = deque(maxlen=100000)
-        self.detection_times = deque(maxlen=100000)
 
         self.maxXRange = 1000  # Default max X-axis range
         self.numBins = 20 # Default number of bins
@@ -48,7 +48,17 @@ class SerialHistogram(QtWidgets.QWidget):
         self.changeBinsButton.setStyleSheet(button_style)
         self.changeBinsButton.clicked.connect(self.changeNumberOfBins)
 
-        self.changeXAxisButton.clicked.connect(self.changeXAxisRange)
+        # Button to clear the plot
+        self.clearPlotButton = QtWidgets.QPushButton("Clear Plot")
+        self.layout.addWidget(self.clearPlotButton)
+        self.clearPlotButton.setStyleSheet(button_style)
+        self.clearPlotButton.clicked.connect(self.clearPlot)
+
+        # Button to save the plot
+        self.savePlotButton = QtWidgets.QPushButton("Save Plot")
+        self.layout.addWidget(self.savePlotButton)
+        self.savePlotButton.setStyleSheet(button_style)
+        self.savePlotButton.clicked.connect(self.savePlot)
 
 
     def setupSerial(self):
@@ -61,13 +71,14 @@ class SerialHistogram(QtWidgets.QWidget):
             while self.serial_port.inWaiting() > 0:
                 line = self.serial_port.readline().decode("utf-8").rstrip()
                 _, time_since_last_pulse, _ = line.split(" ")
-                self.time_differences.append(float(time_since_last_pulse))
+                time_since_last_pulse = float(time_since_last_pulse)
+                self.time_differences.append(time_since_last_pulse)
 
         except Exception as e:
             print(f"Error: {e}")
 
         if len(self.time_differences) > 0:
-            y, x = np.histogram(list(self.time_differences), bins=self.numBins, range=(0, self.maxXRange))
+            y, x = np.histogram(list(self.time_differences), bins=self.numBins, range=(25, self.maxXRange))
             self.plotWidget.clear()
             self.plotWidget.plot(x, y, stepMode=True, fillLevel=0, brush=pg.mkBrush('#374c80'))
 
@@ -82,6 +93,19 @@ class SerialHistogram(QtWidgets.QWidget):
         if ok:
             self.numBins = numBins
             self.updateHistogram()  # Update histogram to reflect new number of bins immediately
+
+    def clearPlot(self):
+        """Clear the plot and the underlying data."""
+        self.plotWidget.clear()  # This clears the visual plot
+        self.time_differences.clear()
+
+    def savePlot(self):
+        """Save the current plot to a file."""
+        # Define the file name and format. For example, 'histogram.png'
+        fileName, _ = QtWidgets.QFileDialog.getSaveFileName(self, "Save Plot", "", "PNG Image (*.png);;All Files (*)")
+        if fileName:
+            exporter = pg.exporters.ImageExporter(self.plotWidget.plotItem)
+            exporter.export(fileName)
 
 if __name__ == '__main__':
     app = QtWidgets.QApplication(sys.argv)

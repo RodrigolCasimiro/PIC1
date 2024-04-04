@@ -4,9 +4,12 @@ const int ledPin = 13;    // Built-in LED pin
 
 // Initialize variables
 unsigned long lastPulseTime = 0; // Time of the last detected pulse
-const long debounceTime = 10;    // Debounce time in milliseconds to prevent false triggers
 int pulseCount = 0;              // Total number of pulses detected
 unsigned long startTime;         // Start time of the program for time passed calculation
+
+// Parameters
+const long debounceTime = 10;    // Debounce time in milliseconds to prevent false triggers
+const long threshold     = 2.5;   // Threshold in Volts
 
 void setup() {
   Serial.begin(9600);            // Start serial communication at 9600 baud
@@ -25,11 +28,8 @@ void detectPulse() {
   unsigned long currentTime = millis(); // Get the current time
   
   // Check if a pulse is detected considering the debounce time
-  if (voltage < 2.5 && currentTime - lastPulseTime > debounceTime) {
-    digitalWrite(ledPin, HIGH); // Turn on the LED
+  if (voltage < threshold && currentTime - lastPulseTime > debounceTime) {
     delay(debounceTime - 2);    // Short delay to visibly indicate the pulse detection
-    digitalWrite(ledPin, LOW);  // Turn off the LED
-    
     pulseCount++; // Increment the pulse count
     
     // Calculate time passed since the start and since the last pulse
