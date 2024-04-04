@@ -19,8 +19,8 @@ class SerialHistogram(QtWidgets.QWidget):
         self.setupSerial()
 
     def setupUi(self):
-        self.layout = QtWidgets.QVBoxLayout()
-        self.setLayout(self.layout)
+        self.mainLayout = QtWidgets.QHBoxLayout()
+        self.setLayout(self.mainLayout)
 
         button_style = ("QPushButton {"
                         "background-color: #FFFFFF;"
@@ -29,37 +29,77 @@ class SerialHistogram(QtWidgets.QWidget):
                         "padding: 6px;"
                         "}")
 
-        # Plot
-        self.plotWidget = pg.PlotWidget()
-        self.layout.addWidget(self.plotWidget)
-        self.plotWidget.setTitle("Histogram of Time Between Detections")
-        self.plotWidget.showGrid(x=True, y=True)
-        self.plotWidget.setBackground('#FFFFFF')
+        """Exponential Histogram Controls"""
+        # Layout for histogram
+        self.exponentialLayout = QtWidgets.QVBoxLayout()
+        self.mainLayout.addLayout(self.exponentialLayout)
+
+        # Plot for histogram
+        self.exponentialPlotWidget = pg.PlotWidget()
+        self.exponentialLayout.addWidget(self.exponentialPlotWidget)
+        self.exponentialPlotWidget.setTitle("Histogram of Time Between Detections")
+        self.exponentialPlotWidget.showGrid(x=True, y=True)
+        self.exponentialPlotWidget.setBackground('#FFFFFF')
 
         # Button X-axis range
         self.changeXAxisButton = QtWidgets.QPushButton("Change X-axis Range")
-        self.layout.addWidget(self.changeXAxisButton)
+        self.exponentialLayout.addWidget(self.changeXAxisButton)
         self.changeXAxisButton.setStyleSheet(button_style)
         self.changeXAxisButton.clicked.connect(self.changeXAxisRange)
 
         # Button number of bins
         self.changeBinsButton = QtWidgets.QPushButton("Change Number of Bins")
-        self.layout.addWidget(self.changeBinsButton)
+        self.exponentialLayout.addWidget(self.changeBinsButton)
         self.changeBinsButton.setStyleSheet(button_style)
         self.changeBinsButton.clicked.connect(self.changeNumberOfBins)
 
         # Button to clear the plot
         self.clearPlotButton = QtWidgets.QPushButton("Clear Plot")
-        self.layout.addWidget(self.clearPlotButton)
+        self.exponentialLayout.addWidget(self.clearPlotButton)
         self.clearPlotButton.setStyleSheet(button_style)
         self.clearPlotButton.clicked.connect(self.clearPlot)
 
         # Button to save the plot
         self.savePlotButton = QtWidgets.QPushButton("Save Plot")
-        self.layout.addWidget(self.savePlotButton)
+        self.exponentialLayout.addWidget(self.savePlotButton)
         self.savePlotButton.setStyleSheet(button_style)
         self.savePlotButton.clicked.connect(self.savePlot)
 
+        """Poisson Histogram Controls"""
+        # Layout for the new counts plot
+        self.poissonLayout = QtWidgets.QVBoxLayout()
+        self.mainLayout.addLayout(self.poissonLayout)
+
+        # Plot for the new counts
+        self.poissonPlotWidget = pg.PlotWidget()
+        self.poissonLayout.addWidget(self.poissonPlotWidget)
+        self.poissonPlotWidget.setTitle("Histogram of Counts per Interval")
+        self.poissonPlotWidget.showGrid(x=True, y=True)
+        self.poissonPlotWidget.setBackground('#FFFFFF')
+
+        # Button X-axis range
+        self.changeXAxisButton = QtWidgets.QPushButton("Change X-axis Range")
+        self.poissonLayout.addWidget(self.changeXAxisButton)
+        self.changeXAxisButton.setStyleSheet(button_style)
+        self.changeXAxisButton.clicked.connect(self.changeXAxisRange)
+
+        # Button number of bins
+        self.changeBinsButton = QtWidgets.QPushButton("Change Number of Bins")
+        self.poissonLayout.addWidget(self.changeBinsButton)
+        self.changeBinsButton.setStyleSheet(button_style)
+        self.changeBinsButton.clicked.connect(self.changeNumberOfBins)
+
+        # Button to clear the plot
+        self.clearPlotButton = QtWidgets.QPushButton("Clear Plot")
+        self.poissonLayout.addWidget(self.clearPlotButton)
+        self.clearPlotButton.setStyleSheet(button_style)
+        self.clearPlotButton.clicked.connect(self.clearPlot)
+
+        # Button to save the plot
+        self.savePlotButton = QtWidgets.QPushButton("Save Plot")
+        self.poissonLayout.addWidget(self.savePlotButton)
+        self.savePlotButton.setStyleSheet(button_style)
+        self.savePlotButton.clicked.connect(self.savePlot)
 
     def setupSerial(self):
         self.timer = pg.QtCore.QTimer()
