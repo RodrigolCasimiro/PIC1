@@ -1,48 +1,54 @@
+// Parameters
+const int threshold_mV = 2500; // mV
+const int debounceTime = 10; // ms
+
 // Define pin connections
-const int geigerPin = A0; // Geiger counter connected to A0
-const int ledPin = 13;    // Built-in LED pin
+const int geigerPin = 14; // A0
 
 // Initialize variables
 unsigned long lastPulseTime = 0; // Time of the last detected pulse
-int pulseCount = 0;              // Total number of pulses detected
-unsigned long startTime;         // Start time of the program for time passed calculation
-
-// Parameters
-const long debounceTime = 10;    // Debounce time in milliseconds to prevent false triggers
-const long threshold     = 2.5;   // Threshold in Volts
+unsigned long lastTime = 0;
+unsigned long timeOffset = 0;
+unsigned long currentTime = 0;
+unsigned long correctedTime = 0;
+volatile int det = 0;
+volatile unsigned long timeDet = 0;
+int threshold;
+int geigerValue = 0;
 
 void setup() {
-  Serial.begin(9600);            // Start serial communication at 9600 baud
-  pinMode(geigerPin, INPUT);     // Set the Geiger counter pin as input
-  pinMode(ledPin, OUTPUT);       // Set the LED pin as output
-  startTime = millis();          // Record the start time of the program
+  Serial.begin(9600);
+  pinMode(geigerPin, INPUT);
+
+  threshold = int(threshold_mV * 1023 / 5000); // bins
+
+  delay(3000); // Delay to start .py code
 }
 
 void loop() {
-  detectPulse(); // Call the pulse detection function
-}
+  currentTime = micros();
 
-void detectPulse() {
-  int geigerValue = analogRead(geigerPin); // Read the value from the Geiger counter
-  float voltage = geigerValue * (5.0 / 1023.0); // Convert the reading to voltage
-  unsigned long currentTime = millis(); // Get the current time
-  
+  // Check for micros() overflow
+  if (currentTime < lastTime) {
+    timeOffset += 4294967295;  // 2^32 - 1
+  }
+
+  lastTime = currentTime;
+  correctedTime = currentTime + timeOffset;
+
+  int geigerValue = analogRead(geigerPin);
+
   // Check if a pulse is detected considering the debounce time
-  if (voltage < threshold && currentTime - lastPulseTime > debounceTime) {
-    delay(debounceTime - 2);    // Short delay to visibly indicate the pulse detection
-    pulseCount++; // Increment the pulse count
-    
-    // Calculate time passed since the start and since the last pulse
-    unsigned long timePassed = currentTime - startTime;
-    unsigned long timeSinceLastPulse = (lastPulseTime > 0) ? currentTime - lastPulseTime : 0;
-    
-    // Print the calculated times and total pulse count
-    Serial.print(timePassed);
-    Serial.print(" ");
-    Serial.print(timeSinceLastPulse);
-    Serial.print(" ");
-    Serial.println(pulseCount);
-    
-    lastPulseTime = currentTime; // Update the last pulse time
+  if (geigerValue > threshold) {
+    // Check if this pulse is within the coincidence window and after the debounce time
+    if (correctedTime - lastPulseTime > debounceTime * 1000) {
+      Serial.print(geigerValue * 1023/5000); // mV
+      Serial.print(" ");
+      Serial.print(correctedTime); // µs
+      Serial.print(" ");
+      Serial.println(correctedTime - lastPulseTime); // µs
+
+      lastPulseTime = correctedTime; // Update the last pulse time
+    }
   }
 }
