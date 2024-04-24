@@ -15,12 +15,13 @@ volatile int det = 0;
 volatile unsigned long timeDet = 0;
 int threshold;
 int geigerValue = 0;
+String output = "";
 
 void setup() {
   Serial.begin(9600);
   pinMode(geigerPin, INPUT);
 
-  threshold = int(threshold_mV * 1023 / 5000); // bins
+  threshold = int(threshold_mV * 1024 / 5000); // bins
 
   delay(3000); // Delay to start .py code
 }
@@ -42,13 +43,14 @@ void loop() {
   if (geigerValue > threshold) {
     // Check if this pulse is within the coincidence window and after the debounce time
     if (correctedTime - lastPulseTime > debounceTime * 1000) {
-      Serial.print(geigerValue * 1023/5000); // mV
-      Serial.print(" ");
-      Serial.print(correctedTime); // µs
-      Serial.print(" ");
-      Serial.println(correctedTime - lastPulseTime); // µs
+      output = String(geigerValue * 5000 / 1024); //mv
+      output += " " + String(correctedTime); // µs
+      output += " " + String(correctedTime - lastPulseTime); // µs
+
+      Serial.println(output); // µs
 
       lastPulseTime = correctedTime; // Update the last pulse time
     }
   }
+  delayMicroseconds(1);
 }
