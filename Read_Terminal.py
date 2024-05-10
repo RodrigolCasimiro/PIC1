@@ -19,7 +19,7 @@ class SerialHistogram(QtWidgets.QWidget):
         self.timeStamps = deque(maxlen=100000)
 
         self.maxXRangeExp = 1000  # Default max X-axis range
-        self.maxXRangePoisson = 500000
+        self.poissonTimeInterval = 10000  # Default value in milliseconds
         self.numBinsExp = 20 # Default number of bins for Exp
         self.numBinsPoisson = 25 # Default number of bins for Poisson
         self.setupUi()
@@ -31,7 +31,7 @@ class SerialHistogram(QtWidgets.QWidget):
             print("ERROR")
 
         # Create the file within the specified folder
-        file_path = os.path.join(folder_path, "dataset_" + str(date.today()) + ".txt")
+        file_path = os.path.join(folder_path, "GeigerDataset_" + str(date.today()) + ".txt")
         self.file = open(file_path, "w")
 
 
@@ -93,9 +93,9 @@ class SerialHistogram(QtWidgets.QWidget):
         # Plot for the new counts
         self.poissonPlotWidget = pg.PlotWidget()
         self.poissonLayout.addWidget(self.poissonPlotWidget)
-        self.poissonPlotWidget.setTitle("Place Holder")
-        self.poissonPlotWidget.setLabel('left', 'Place Holder')
-        self.poissonPlotWidget.setLabel('bottom', 'Place Holder (ms)')
+        self.poissonPlotWidget.setTitle("Poisson Distribution of Counts per Time Interval")
+        self.poissonPlotWidget.setLabel('left', 'Count of events')
+        self.poissonPlotWidget.setLabel('bottom', 'Time (s)')
         self.poissonPlotWidget.showGrid(x=True, y=True)
         self.poissonPlotWidget.setBackground('#FFFFFF')
 
@@ -127,58 +127,39 @@ class SerialHistogram(QtWidgets.QWidget):
         self.timer = pg.QtCore.QTimer()
         self.timer.timeout.connect(self.updateExponential)
         self.timer.timeout.connect(self.updatePoisson)
-        self.timer.start(1000)  # Update interval in milliseconds
+        self.timer.start(3000)  # Update interval in milliseconds
 
     def getData(self):
         try:
             while self.serial_port.inWaiting() > 0:
                 line = self.serial_port.readline().decode("utf-8").rstrip()
-                _, time_since_last_pulse, _ = line.split(" ")
-                time_since_last_pulse = float(time_since_last_pulse)
+                if line:
+                    peak, time_stamp, time_since_last_pulse = map(int, line.split())
 
-                # Check if time_differences is not empty for cumulative calculation, else start from 0
-                if self.time_differences:
-                    cumulative_time = self.timeStamps[-1] + time_since_last_pulse
-                else:
-                    cumulative_time = time_since_last_pulse
+                    self.time_differences.append(time_since_last_pulse) # ms
+                    self.timeStamps.append(time_stamp)
 
-                self.time_differences.append(time_since_last_pulse)
-                self.timeStamps.append(cumulative_time)
-
-                # Call to write data to file
-                self.writeDataToFile(time_since_last_pulse)
+                    # Write data to file
+                    self.writeDataToFile(peak, time_stamp, time_since_last_pulse)
 
         except Exception as e:
             print(f"Error in getData: {e}")
 
-    def getData(self):
-        """Reads data from the serial port and appends time since last pulse to time_differences."""
-        try:
-            while self.serial_port.inWaiting() > 0:
-                line = self.serial_port.readline().decode("utf-8").rstrip()
-
-                time_since_last_pulse = float(time_since_last_pulse)
-                self.time_differences.append(time_since_last_pulse)
-        except Exception as e:
-            print(f"Error in getData: {e}")
-
-    def writeDataToFile(self, time_difference):
+    def writeDataToFile(self, peak, time_stamp, time_since_last_pulse):
         """Write acquired data to file."""
-        if not self.time_differences:  # Check if it's the first event
-            time_difference = 0  # No previous event to calculate difference from
 
-        # Unix timestamp in seconds and microseconds
-        unix_time_seconds = int(time.time())
-        unix_time_microsecs = int((time.time() - unix_time_seconds) * 1_000_000)
+        # Unix timestamp in seconds
+        current_time = int(time.time())
 
-        # Format: count, unix_time_seconds, unix_time_microsecs, time_difference
-        line = f"{len(self.time_differences)}, {unix_time_seconds}, {unix_time_microsecs}, {time_difference}\n"
+        # Format: count; unix_time_seconds (s); peak (mV); time_stamp(μs); time_since_last_pulse (μs)
+        line = f"{len(self.time_differences)} {current_time} {peak} {time_stamp} {time_since_last_pulse}\n"
         self.file.write(line)
-        self.file.flush()  # Ensure data is written to disk
+        self.file.flush() # Ensure data is written to disk
 
     def closeEvent(self, event):
         """Ensures the file is closed properly"""
         self.file.close()
+        self.serial_port.close()
         super(SerialHistogram, self).closeEvent(event)
 
     """Exponential funtions"""
@@ -186,7 +167,7 @@ class SerialHistogram(QtWidgets.QWidget):
         """Updates the exponential plot based on the collected time differences."""
         self.getData()
         if len(self.time_differences) > 0:
-            y, x = np.histogram(list(self.time_differences), bins=self.numBinsExp, range=(0, self.maxXRangeExp))
+            y, x = np.histogram(list(self.time_differences), bins=self.numBinsExp, range=(21, self.maxXRangeExp))
             self.exponentialPlotWidget.clear()
             self.exponentialPlotWidget.plot(x, y, stepMode=True, fillLevel=0, brush=pg.mkBrush('#374c80'))
 
@@ -218,21 +199,49 @@ class SerialHistogram(QtWidgets.QWidget):
 
     """Poisson funtions"""
     def updatePoisson(self):
-        """Updates the Poisson plot based on the collected time differences."""
+        """Updates the Poisson plot based on the counts accumulated in fixed time intervals."""
         self.getData()
         if len(self.timeStamps) > 0:
-            y, x = np.histogram(list(self.timeStamps), bins=self.numBinsPoisson, range=(0, self.maxXRangePoisson))
+            interval_size = 1000  # Interval size of 1000 seconds for Poisson distribution
+
+            # Initialize an empty list to hold counts of each interval
+            counts = []
+            current_count = 0
+            interval_start = self.timeStamps[0] // interval_size * interval_size
+
+            # Count the timestamps in each interval
+            for ts in self.timeStamps:
+                if ts // interval_size * interval_size == interval_start:
+                    current_count += 1
+                else:
+                    counts.append(current_count)
+                    current_count = 1  # Start counting the new interval with this timestamp
+                    interval_start = ts // interval_size * interval_size
+
+            # Add the last count if not already added
+            counts.append(current_count)
+
+            # Calculate the frequency of each count value
+
+            # Update the Poisson plot with new data
             self.poissonPlotWidget.clear()
-            self.poissonPlotWidget.plot(x, y, stepMode=True, fillLevel=0, brush=pg.mkBrush('#374c80'))
+
+            count_bins = np.arange(0, max(counts) + 2)  # +2 to ensure the last bin is included correctly
+            count_frequencies, bin_edges = np.histogram(counts, bins=count_bins)
+
+            # Correct plotting call
+            self.poissonPlotWidget.plot(bin_edges, count_frequencies, stepMode=True, fillLevel=0, brush=pg.mkBrush('#374c80'))
+
 
     def changeXAxisRangePoisson(self):
-        maxXRange, ok = QtWidgets.QInputDialog.getInt(self, "Change X-axis Range", "Enter new max X-axis value (ms):", value=self.maxXRangePoisson, min=500)
+        """Change the time interval size for the Poisson histogram based on user input."""
+        new_interval, ok = QtWidgets.QInputDialog.getInt(self, "Change Time Interval", "Enter new interval size (ms):", value=10000, min=1000, max=60000)
         if ok:
-            self.maxXRangePoisson = maxXRange
-            self.updatePoisson()  # Update histogram to reflect new X-axis range immediately
+            self.intervalSizePoisson = new_interval
+            self.updatePoisson()  # Update histogram to reflect new interval size immediately
 
     def changeNumberOfBinsPoisson(self):
-        numBins, ok = QtWidgets.QInputDialog.getInt(self, "Change Number of Bins", "Enter new number of bins:", value=self.numBinsPoisson, min=1)
+        numBins, ok = QtWidgets.QInputDialog.getInt(self, "Change Number of Bins", "Enter new number of bins:", value=self.numBinsPoisson, min=1, max=len(self.timeStamps))
         if ok:
             self.numBinsPoisson = numBins
             self.updatePoisson()  # Update histogram to reflect new number of bins immediately
@@ -253,7 +262,8 @@ if __name__ == '__main__':
     signal.signal(signal.SIGINT, signal.SIG_DFL) # ^C works this way
 
     app = QtWidgets.QApplication(sys.argv)
-    window = SerialHistogram("/dev/cu.usbmodemF412FA75E7882")
+    window = SerialHistogram("/dev/tty.usbmodem1101")
+#    window = SerialHistogram("/dev/cu.usbmodemF412FA75E7882")
     window.resize(1000, 600)
     window.show()
     sys.exit(app.exec_())
