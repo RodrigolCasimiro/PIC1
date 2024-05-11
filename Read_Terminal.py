@@ -5,38 +5,47 @@ import time
 import os
 import numpy as np
 import pyqtgraph as pg
+from pyqtgraph.exporters import ImageExporter
 from PyQt5 import QtWidgets, QtGui, QtCore
+from PyQt5.QtWidgets import QMessageBox
 from collections import deque
 from datetime import datetime as date
 
 #from MouseHover import CustomPlotWidget
 
+arduinoPort = "/dev/cu.usbmodemF412FA75E7882"
+# arduinoPort = "/dev/tty.usbmodem1101"
+
 class SerialHistogram(QtWidgets.QWidget):
     def __init__(self, port, baudrate=9600, parent=None):
         super(SerialHistogram, self).__init__(parent)
         self.serial_port = serial.Serial(port, baudrate, timeout=1)
-        self.time_differences = deque(maxlen=100000)
-        self.timeStamps = deque(maxlen=100000)
+        self.time_differences = deque(maxlen=1000000)
+        self.timeStamps = deque(maxlen=1000000)
 
         self.maxXRangeExp = 1000  # Default max X-axis range
-        self.poissonTimeInterval = 10000  # Default value in milliseconds
         self.numBinsExp = 20 # Default number of bins for Exp
-        self.numBinsPoisson = 25 # Default number of bins for Poisson
+        self.timeIntervalPoisson = 600 # Default time interval for Poisson
         self.setupUi()
         self.setupSerial()
 
-        folder_path = "/Users/rodrigocasimiro/Desktop/Data"
+        # Get the directory of the currently running script
+        script_directory = os.path.dirname(os.path.realpath(__file__))
 
+        # Define the folder path for saving data
+        folder_path = os.path.join(script_directory, 'Data')
+
+        # Create the 'Data' directory if it does not exist
         if not os.path.exists(folder_path):
-            print("ERROR")
+            os.makedirs(folder_path)
 
         # Create the file within the specified folder
-        file_path = os.path.join(folder_path, "GeigerDataset_" + str(date.today()) + ".txt")
+        file_path = os.path.join(folder_path, f"GeigerDataset_{date.today()}.txt")
         self.file = open(file_path, "w")
 
 
     def setupUi(self):
-        self.setWindowTitle('Muon Telescope')
+        self.setWindowTitle('Geiger Counter')
         self.mainLayout = QtWidgets.QHBoxLayout()
         self.setLayout(self.mainLayout)
 
@@ -99,17 +108,17 @@ class SerialHistogram(QtWidgets.QWidget):
         self.poissonPlotWidget.showGrid(x=True, y=True)
         self.poissonPlotWidget.setBackground('#FFFFFF')
 
-        # Button X-axis range
-        self.changeXAxisButtonPoisson = QtWidgets.QPushButton("Change X-axis Range")
-        self.poissonLayout.addWidget(self.changeXAxisButtonPoisson)
-        self.changeXAxisButtonPoisson.setStyleSheet(button_style)
-        self.changeXAxisButtonPoisson.clicked.connect(self.changeXAxisRangePoisson)
+        # # Button X-axis range
+        # self.changeXAxisButtonPoisson = QtWidgets.QPushButton("Change X-axis Range")
+        # self.poissonLayout.addWidget(self.changeXAxisButtonPoisson)
+        # self.changeXAxisButtonPoisson.setStyleSheet(button_style)
+        # self.changeXAxisButtonPoisson.clicked.connect(self.changeXAxisRangePoisson)
 
         # Button number of bins
-        self.changeBinsButtonPoisson = QtWidgets.QPushButton("Change Number of Bins")
+        self.changeBinsButtonPoisson = QtWidgets.QPushButton("Change Time Interval")
         self.poissonLayout.addWidget(self.changeBinsButtonPoisson)
         self.changeBinsButtonPoisson.setStyleSheet(button_style)
-        self.changeBinsButtonPoisson.clicked.connect(self.changeNumberOfBinsPoisson)
+        self.changeBinsButtonPoisson.clicked.connect(self.changeTimeIntervalPoisson)
 
         # Button to clear the plot
         self.clearPlotButtonPoisson = QtWidgets.QPushButton("Clear Plot")
@@ -127,7 +136,7 @@ class SerialHistogram(QtWidgets.QWidget):
         self.timer = pg.QtCore.QTimer()
         self.timer.timeout.connect(self.updateExponential)
         self.timer.timeout.connect(self.updatePoisson)
-        self.timer.start(3000)  # Update interval in milliseconds
+        self.timer.start(self.timeIntervalPoisson*3)  # Update interval in milliseconds
 
     def getData(self):
         try:
@@ -167,7 +176,7 @@ class SerialHistogram(QtWidgets.QWidget):
         """Updates the exponential plot based on the collected time differences."""
         self.getData()
         if len(self.time_differences) > 0:
-            y, x = np.histogram(list(self.time_differences), bins=self.numBinsExp, range=(21, self.maxXRangeExp))
+            y, x = np.histogram(list(self.time_differences), bins=self.numBinsExp, range=(15, self.maxXRangeExp))
             self.exponentialPlotWidget.clear()
             self.exponentialPlotWidget.plot(x, y, stepMode=True, fillLevel=0, brush=pg.mkBrush('#374c80'))
 
@@ -188,50 +197,37 @@ class SerialHistogram(QtWidgets.QWidget):
         self.exponentialPlotWidget.clear()  # This clears the visual plot
         self.time_differences.clear()
 
-    def savePlotExp(self):
-        """Save the current plot to a file."""
-        # Define the file name and format. For example, 'histogram.png'
-        fileName, _ = QtWidgets.QFileDialog.getSaveFileName(self, "Save Plot", "", "PNG Image (*.png);;All Files (*)")
-        if fileName:
-            exporter = pg.exporters.ImageExporter(self.exponentialPlotWidget.plotItem)
-            exporter.export(fileName)
 
-
-    """Poisson funtions"""
     def updatePoisson(self):
-        """Updates the Poisson plot based on the counts accumulated in fixed time intervals."""
+        """Updates the Poisson plot based on the counts accumulated in fixed time intervals, excluding the last incomplete interval."""
         self.getData()
         if len(self.timeStamps) > 0:
-            interval_size = 1000  # Interval size of 1000 seconds for Poisson distribution
+            interval_size = self.timeIntervalPoisson  # Assume this is set to a value like 1000 milliseconds
 
-            # Initialize an empty list to hold counts of each interval
-            counts = []
-            current_count = 0
-            interval_start = self.timeStamps[0] // interval_size * interval_size
+            # Determine the time range from the first to the last timestamp
+            first_timestamp = self.timeStamps[0]
+            last_timestamp = self.timeStamps[-1]
+
+            # Calculate the total number of intervals, considering only completed intervals
+            num_intervals = (last_timestamp - first_timestamp) // interval_size
+            counts = [0] * num_intervals
 
             # Count the timestamps in each interval
             for ts in self.timeStamps:
-                if ts // interval_size * interval_size == interval_start:
-                    current_count += 1
-                else:
-                    counts.append(current_count)
-                    current_count = 1  # Start counting the new interval with this timestamp
-                    interval_start = ts // interval_size * interval_size
-
-            # Add the last count if not already added
-            counts.append(current_count)
-
-            # Calculate the frequency of each count value
+                interval_index = (ts - first_timestamp) // interval_size
+                if interval_index < num_intervals:  # This ensures we do not count into the last, potentially unfinished interval
+                    counts[interval_index] += 1
 
             # Update the Poisson plot with new data
             self.poissonPlotWidget.clear()
 
-            count_bins = np.arange(0, max(counts) + 2)  # +2 to ensure the last bin is included correctly
+            # Calculate bin edges from 0 to the max number of counts found, plus one extra bin
+            max_count = max(counts) if counts else 0
+            count_bins = np.arange(0, max_count + 2)  # +2 to include the last bin edge
             count_frequencies, bin_edges = np.histogram(counts, bins=count_bins)
 
-            # Correct plotting call
+            # Correct plotting call, ensure that data plotted does not include the last incomplete interval
             self.poissonPlotWidget.plot(bin_edges, count_frequencies, stepMode=True, fillLevel=0, brush=pg.mkBrush('#374c80'))
-
 
     def changeXAxisRangePoisson(self):
         """Change the time interval size for the Poisson histogram based on user input."""
@@ -240,10 +236,10 @@ class SerialHistogram(QtWidgets.QWidget):
             self.intervalSizePoisson = new_interval
             self.updatePoisson()  # Update histogram to reflect new interval size immediately
 
-    def changeNumberOfBinsPoisson(self):
-        numBins, ok = QtWidgets.QInputDialog.getInt(self, "Change Number of Bins", "Enter new number of bins:", value=self.numBinsPoisson, min=1, max=len(self.timeStamps))
+    def changeTimeIntervalPoisson(self):
+        numBins, ok = QtWidgets.QInputDialog.getInt(self, "Change Poisson Time Interval", "Enter new time interval:", value=self.timeIntervalPoisson, min=10, max=20000)
         if ok:
-            self.numBinsPoisson = numBins
+            self.timeIntervalPoisson = numBins
             self.updatePoisson()  # Update histogram to reflect new number of bins immediately
 
     def clearPlotPoisson(self):
@@ -251,19 +247,43 @@ class SerialHistogram(QtWidgets.QWidget):
         self.poissonPlotWidget.clear()  # This clears the visual plot
         self.timeStamps.clear()
 
-    def savePlotPoisson(self):
-        """Save the current Poisson plot to a file."""
-        fileName, _ = QtWidgets.QFileDialog.getSaveFileName(self, "Save Plot", "", "PNG Image (*.png);;All Files (*)")
-        if fileName:
-            exporter = pg.exporters.ImageExporter(self.poissonPlotWidget.plotItem)
+    def savePlot(self, plotWidget, defaultName="plot"):
+        """Save the current plot to a file."""
+        # Get the directory of the currently running script
+        script_directory = os.path.dirname(os.path.realpath(__file__))
+
+        # Define the folder path for saving plots
+        folder_path = os.path.join(script_directory, 'Plots')
+
+        # Create the 'Plots' directory if it does not exist
+        if not os.path.exists(folder_path):
+            os.makedirs(folder_path)
+
+        # Format the file name with the current date
+        today_date = date.today().strftime("%Y-%m-%d")
+        fileName = os.path.join(folder_path, f"{defaultName}_{today_date}.png")
+
+        try:
+            exporter = pg.exporters.ImageExporter(plotWidget.plotItem)
             exporter.export(fileName)
+            QMessageBox.information(self, "Success", "Plot saved successfully!")
+        except Exception as e:
+            QMessageBox.critical(self, "Error", f"Failed to save the file: {str(e)}")
+            print(f"Error saving the plot: {e}")
+
+    def savePlotExp(self):
+        """Save the current exponential plot to a file."""
+        self.savePlot(self.exponentialPlotWidget, "exponential")
+
+    def savePlotPoisson(self):
+        """Save the current Histogram plot to a file."""
+        self.savePlot(self.poissonPlotWidget, "poisson")
 
 if __name__ == '__main__':
     signal.signal(signal.SIGINT, signal.SIG_DFL) # ^C works this way
 
     app = QtWidgets.QApplication(sys.argv)
-    window = SerialHistogram("/dev/tty.usbmodem1101")
-#    window = SerialHistogram("/dev/cu.usbmodemF412FA75E7882")
+    window = SerialHistogram(arduinoPort)
     window.resize(1000, 600)
     window.show()
     sys.exit(app.exec_())
