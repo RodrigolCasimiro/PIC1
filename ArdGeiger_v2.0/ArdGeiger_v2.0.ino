@@ -1,13 +1,24 @@
-const int sensorPin = A0;
-const float upperThreshold = 4.0; // Set the initial higher threshold (formerly lower)
-const float lowerThreshold = 1.5; // Set the final lower threshold (formerly upper)
-unsigned long lastPulseTime = 0;
+// Parameters
+const int upperThreshold = 818; // 4.0V
+const int lowerThreshold = 307; // 1.5V
+
+// Pins
+const int sensorPin = 14; // A0
+
+// Variable Declaration
+int peakValue = 1023;
+volatile int geigerVoltage = 0;
+
 bool awaitingFirstThreshold = true;
 bool awaitingSecondThreshold = false;
 bool awaitingPeak = false;
 bool awaitingLowerDescend = false;
-float troughValue = 5.0;
-unsigned long troughTime = 0;
+
+unsigned long lastPulseTime = 0;
+unsigned long peakTime = 0;
+unsigned long timeSinceLastPulse = 0;
+volatile unsigned long currentTime = 0;
+
 
 void setup() {
   Serial.begin(9600);
@@ -15,40 +26,43 @@ void setup() {
 }
 
 void loop() {
-  float voltage = analogRead(sensorPin) * (5.0 / 1023.0); // Convert the analog reading to voltage
-  unsigned long currentTime = millis();
+  currentTime = millis();
+  geigerVoltage = analogRead(sensorPin);
 
   if (awaitingFirstThreshold) {
-    if (voltage < upperThreshold) {
+    if (geigerVoltage < upperThreshold) {
       awaitingFirstThreshold = false;
       awaitingSecondThreshold = true;
     }
   } else if (awaitingSecondThreshold) {
-    if (voltage < lowerThreshold) {
+    if (geigerVoltage < lowerThreshold) {
       awaitingSecondThreshold = false;
       awaitingPeak = true;
-      troughValue = voltage;
-      troughTime = currentTime;
+      peakValue = geigerVoltage;
+      peakTime = currentTime;
     }
   } else if (awaitingPeak) {
-    if (voltage < troughValue) {
-      troughValue = voltage;
-      troughTime = currentTime;
+    if (geigerVoltage < peakValue) {
+      peakValue = geigerVoltage;
+      peakTime = currentTime;
     }
-    if (voltage > lowerThreshold) {
+    if (geigerVoltage > lowerThreshold) {
       awaitingLowerDescend = true;
       awaitingPeak = false;
     }
   } else if (awaitingLowerDescend) {
-    if (voltage > upperThreshold) {
-      // Log the trough when it ascends above the upper threshold
-      unsigned long timeSinceLastPulse = currentTime - lastPulseTime;
-      Serial.print(troughTime); Serial.print(" ms ");
-      Serial.print(int(troughValue * 1000)); Serial.print(" mV ");
-      Serial.print(timeSinceLastPulse); Serial.println(" ms");
+    if (geigerVoltage > upperThreshold) {
+      timeSinceLastPulse = peakTime - lastPulseTime;
+      peakValue = int(peakValue * 5000 / 1023);
       
+      // Print Output
+      // Peak Value (mV); Peak Timestamp (ms); Time since last Peak (ms); 
+      Serial.print(peakValue); Serial.print(" ");
+      Serial.print(peakTime); Serial.print(" ");
+      Serial.println(timeSinceLastPulse);
+      
+      peakValue = 1023;
       lastPulseTime = currentTime;
-      troughValue = 5.0;
       awaitingFirstThreshold = true;
       awaitingLowerDescend = false;
     }
