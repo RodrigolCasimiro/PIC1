@@ -102,65 +102,13 @@ def plot_histogram(peak_values):
     plt.show(block = False)
 
 
-def plot_histogram_and_average(time_stamps, counts, interval_minutes, max_interval=None, zoom=False):
-    # Convert unix time stamps from milliseconds to minutes
-    minutes_since_start = (np.array(time_stamps) - time_stamps[0]) / 60000.0
-
-
-    # Determine the maximum interval
-    if max_interval is None:
-        max_interval = np.max(minutes_since_start)
-
-    # Define the bin edges for the histogram
-    bin_edges = np.arange(0, max_interval + interval_minutes, interval_minutes)
-
-    # Count the number of timeStamps in each bin
-    hist, _ = np.histogram(minutes_since_start, bins=bin_edges)
-
-    # Calculate the average counts per interval
-    counts = np.array(counts)
-    counts_per_bin = np.zeros(len(bin_edges) - 2)  # Exclude the last bin
-    for i in range(len(bin_edges) - 2):
-        in_bin = (minutes_since_start >= bin_edges[i]) & (minutes_since_start < bin_edges[i + 1])
-        if np.sum(in_bin) > 0:
-            counts_per_bin[i] = np.mean(counts[in_bin])
-        else:
-            counts_per_bin[i] = 0
-
-    # Calculate the average height of the histogram bars, excluding the last bar
-    average_hist_height = np.mean(hist[:-1])
-
-    # Calculate the uncertainty as sqrt(N) for each bin
-    uncertainty = np.sqrt(hist[:-1])
-
-    # Plot the histogram of the number of timeStamps, excluding the last bar
-    fig, ax1 = plt.subplots(figsize=(12, 6))
-
-    color = 'tab:blue'
-    ax1.set_xlabel('Time (minutes)')
-    ax1.set_ylabel('Number of Time Stamps', color='black')
-    ax1.hist(minutes_since_start, bins=bin_edges[:-1], edgecolor='black', alpha=0.7, label='Number of Time Stamps', color=color)
-    ax1.tick_params(axis='y', labelcolor=color)
-
-    # Plot the average height of the histogram bars
-    ax1.axhline(average_hist_height, color='orange', label='Average Number of Time Stamps')
-
-    # Plot the uncertainty lines
-    ax1.axhline(average_hist_height + np.mean(uncertainty), color='orange', linestyle='--', linewidth=0.7)
-    ax1.axhline(average_hist_height - np.mean(uncertainty), color='orange', linestyle='--', linewidth=0.7, label='Uncertainty')
-
-    fig.tight_layout()
-    plt.title('Histogram of Time Stamps and Average Counts per Time Interval')
-    plt.legend()
+def plot_histogram_and_average(time_stamps, counts, interval_minutes, max_interval=None, zoom=False, num_bins=10):
+    # Create the figure and axes based on the zoom parameter
     if zoom:
-        upper = average_hist_height + zoom * np.mean(uncertainty)
-        lower = average_hist_height - zoom * np.mean(uncertainty)
-        plt.ylim(lower , upper)
+        fig, (ax2, ax1) = plt.subplots(1, 2, figsize=(18, 6), gridspec_kw={'width_ratios': [1, 5]})
+    else:
+        fig, ax1 = plt.subplots(1, 1, figsize=(12, 6))
 
-    plt.show(block = False)
-
-
-def plot_gaussian_projection(time_stamps, interval_minutes, max_interval=None, num_bins=20):
     # Convert time stamps from milliseconds to minutes
     minutes_since_start = (np.array(time_stamps) - time_stamps[0]) / 60000.0
 
@@ -171,25 +119,90 @@ def plot_gaussian_projection(time_stamps, interval_minutes, max_interval=None, n
     # Define the bin edges for the histogram
     bin_edges = np.arange(0, max_interval + interval_minutes, interval_minutes)
 
-    # Count the number of timeStamps in each bin
+    # Count the number of time stamps in each bin
     hist, _ = np.histogram(minutes_since_start, bins=bin_edges)
 
-    # Create a projection of the bar heights
-    unique_heights, counts = np.unique(hist, return_counts=True)
+    # Calculate the average height of the histogram bars, excluding the last bar
+    average_hist_height = np.mean(hist[:-1])
 
-    # Adjust number of bins
+    # Calculate the uncertainty as sqrt(N) for each bin
+    uncertainty = np.sqrt(hist[:-1])
+
+    # Plot the histogram of the number of time stamps
+    color = 'tab:blue'
+    ax1.hist(minutes_since_start, bins=bin_edges[:-1], edgecolor='black', alpha=0.7, label='Number of Time Stamps', color=color)
+    ax1.set_xlabel('Time (minutes)')
+    #ax1.set_ylabel('Number of Time Stamps', color='black')
+    ax1.tick_params(axis='y', labelcolor=color)
+    ax1.set_yticklabels([])
+    ax1.tick_params(axis='y', left=False)
+
+
+    # Plot the average height and uncertainty lines
+    plot_uncertainty_lines(ax1, average_hist_height, uncertainty)
+
+    # Set title and legend for the histogram plot
+    ax1.set_title('Histogram of Time Stamps and Average Counts per Time Interval')
+    ax1.legend()
+
+    # Adjust y-axis limits if zoom is enabled
+    if zoom:
+        upper = average_hist_height + zoom * np.mean(uncertainty)
+        lower = average_hist_height - zoom * np.mean(uncertainty)
+        ax1.set_ylim(lower, upper)
+        ax2.set_ylim(lower, upper)
+
+        # Create a projection of the bar heights
+        unique_heights, counts = np.unique(hist, return_counts=True)
+        plot_projection(ax2, unique_heights, counts, average_hist_height, uncertainty, num_bins)
+
+    # Show plots
+    plt.tight_layout()
+    plt.show(block=False)
+
+
+def plot_uncertainty_lines(ax, average_height, uncertainty):
+    """
+    Plots the average height and uncertainty lines on the given axis.
+    """
+    sdp1 = average_height + np.mean(uncertainty)
+    sdn1 = average_height - np.mean(uncertainty)
+    sdp2 = average_height + 2 * np.mean(uncertainty)
+    sdn2 = average_height - 2 * np.mean(uncertainty)
+
+    ax.axhline(average_height, color='orange', label='Average Number of Time Stamps')
+    ax.axhline(sdp1, color='orange', ls='--', lw=0.7)
+    ax.axhline(sdn1, color='orange', ls='--', lw=0.7, label='Uncertainty')
+    ax.axhline(sdp2, color='orange', ls=':', lw=0.5)
+    ax.axhline(sdn2, color='orange', ls=':', lw=0.5)
+
+
+def plot_projection(ax, unique_heights, counts, average_height, uncertainty, num_bins):
+    """
+    Plots the projection of bar heights on the given axis.
+    """
+    # Adjust number of bins for the projection plot
     bin_width = (max(unique_heights) - min(unique_heights)) / num_bins
     bins = np.arange(min(unique_heights), max(unique_heights) + bin_width, bin_width)
 
-    # Plot the projection
-    fig, ax = plt.subplots(figsize=(12, 6))
-
-    ax.hist(unique_heights, bins=bins, weights=counts, edgecolor='black', alpha=0.7)
-    ax.set_xlabel('Height of Bars')
-    ax.set_ylabel('Frequency')
+    # Plot the projection histogram
+    ax.hist(unique_heights, bins=bins, weights=counts, edgecolor='black', alpha=0.7, orientation='horizontal')
+    ax.set_xlabel('Frequency')
+    ax.set_ylabel('Number of Counts')
     ax.set_title('Projection of Bar Heights')
 
-    plt.show(block=False)
+    # Plot the average height and uncertainty lines on the projection plot
+    sdp1 = average_height + np.mean(uncertainty)
+    sdn1 = average_height - np.mean(uncertainty)
+    sdp2 = average_height + 2 * np.mean(uncertainty)
+    sdn2 = average_height - 2 * np.mean(uncertainty)
+
+    ax.axhline(average_height, color='orange')
+    ax.axhline(sdp1, color='orange', ls='--', lw=0.7)
+    ax.axhline(sdn1, color='orange', ls='--', lw=0.7)
+    ax.axhline(sdp2, color='orange', ls=':', lw=0.5)
+    ax.axhline(sdn2, color='orange', ls=':', lw=0.5)
+
 
 def find_min_and_count(time_since_last):
     min_value = min(time_since_last)
@@ -220,11 +233,10 @@ plot_histogram(peak_values)
 interval_minutes = 3
 max_interval = 374
 
-plot_histogram_and_average(time_stamps, counts, interval_minutes, max_interval)
+# Plot the histogram and average counts
+interval_minutes = 5
+max_interval = 374
 plot_histogram_and_average(time_stamps, counts, interval_minutes, max_interval, zoom=3)
-
-# Plot the projection of bar heights
-plot_gaussian_projection(time_stamps, interval_minutes, max_interval, num_bins=10)
 
 # Show plots
 plt.show()
