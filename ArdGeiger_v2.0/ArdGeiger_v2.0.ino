@@ -1,6 +1,6 @@
 // Parameters
 const int upperThreshold = 818; // 4.0V
-const int lowerThreshold = 307; // 1.5V
+const int lowerThreshold = 164; // 800mV
 
 // Pins
 const int sensorPin = 14; // A0
