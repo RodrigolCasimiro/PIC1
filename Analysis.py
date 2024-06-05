@@ -1,6 +1,6 @@
 import matplotlib.pyplot as plt
 import numpy as np
-from scipy.stats import norm
+
 
 def extract_values(file_path):
     with open(file_path, 'r') as file:
@@ -14,16 +14,18 @@ def extract_values(file_path):
 
     for line in lines:
         parts = line.strip().split()
-        counts.append(int(parts[0]))
-        unix_time_stamps.append(int(parts[1]))
-        peak_values.append(int(parts[2]))
-        time_stamps.append(int(parts[3]))
-        time_since_last.append(int(parts[4]))
+        if int(parts[4]) >= 14:
+            counts.append(int(parts[0]))
+            unix_time_stamps.append(int(parts[1]))
+            peak_values.append(int(parts[2]))
+            time_stamps.append(int(parts[3]))
+            time_since_last.append(int(parts[4]))
 
     return counts, unix_time_stamps, peak_values, time_stamps, time_since_last
 
 
 def analyze_parity(time_since_last):
+    time_since_last = np.array(time_since_last)
     total_numbers = len(time_since_last)
     odd_count = sum(1 for number in time_since_last if number % 2 != 0)
     even_count = total_numbers - odd_count
@@ -32,9 +34,34 @@ def analyze_parity(time_since_last):
     even_percentage = (even_count / total_numbers) * 100
 
     print("Method 1 (Parity): ")
-    print(f"Percentage of lost bits: {(total_numbers-total_numbers) / total_numbers * 100:.0f}%")
+    print(f"Percentage of lost bits: {(total_numbers-total_numbers) / total_numbers * 100:.2f}%")
     print(f"Percentage of 1's: {odd_percentage:.4f}%")
     print(f"Percentage of 0's: {even_percentage:.4f}%")
+
+
+def analyze_counts_parity(time_stamps, interval_ms):
+    # Determine the maximum time
+    max_time = np.max(time_stamps)
+
+    # Define the bin edges for the intervals
+    bin_edges = np.arange(0, max_time + interval_ms, interval_ms)
+
+    # Count the number of time stamps in each interval
+    counts_per_interval, _ = np.histogram(time_stamps, bins=bin_edges)
+
+    # Determine parity of counts in each interval
+    even_count = sum(1 for count in counts_per_interval if count % 2 == 0)
+    odd_count = len(counts_per_interval) - even_count
+
+    total_intervals = len(counts_per_interval)
+    even_percentage = (even_count / total_intervals) * 100
+    odd_percentage = (odd_count / total_intervals) * 100
+
+    print(f"\nMethod 3 (Counts Parity in {interval_ms} ms intervals):")
+    print(f"Percentage of lost bits: {100-total_intervals/len(time_stamps) * 100:.2f}%")
+    print(f"Percentage of intervals with even counts: {even_percentage:.4f}%")
+    print(f"Percentage of intervals with odd counts: {odd_percentage:.4f}%")
+
 
 
 def analyze_pair_parity(time_since_last):
@@ -61,7 +88,7 @@ def analyze_pair_parity(time_since_last):
     lost_percentage = ((len(last_column_values) - total_bits) / (len(last_column_values))) * 100
 
     print("\nMethod 1 Corrected: ")
-    print(f"Percentage of lost bits: {lost_percentage:.0f}%")
+    print(f"Percentage of lost bits: {lost_percentage:.2f}%")
     print(f"Percentage of 1's: {ones_percentage:.4f}%")
     print(f"Percentage of 0's: {zeros_percentage:.4f}%")
 
@@ -88,14 +115,14 @@ def analyze_intervals(time_since_last, Steps = 1):
     zeros_percentage = (zeros_count / total_bits) * 100
 
     print(f"\nMethod 2 (Step of {Steps}): ")
-    print(f"Percentage of lost bits: {(len(intervals) - total_bits) / len(intervals) * 100:.0f}%")
+    print(f"Percentage of lost bits: {(len(intervals) - total_bits) / len(intervals) * 100:.2f}%")
     print(f"Percentage of 1's: {ones_percentage:.4f}%")
     print(f"Percentage of 0's: {zeros_percentage:.4f}%")
 
 
-def plot_histogram(peak_values):
+def plot_histogram(peak_values, bins=20):
     plt.figure(num='Histogram of Peak Values')
-    plt.hist(peak_values, bins=20, range=(700, 800), edgecolor='black')
+    plt.hist(peak_values, bins=bins, range=(700, 800), edgecolor='black')
     plt.title('Histogram of Peak Values')
     plt.xlabel('Peak Value')
     plt.ylabel('Frequency')
@@ -105,9 +132,12 @@ def plot_histogram(peak_values):
 def plot_histogram_and_average(time_stamps, counts, interval_minutes, max_interval=None, zoom=False, num_bins=10):
     # Create the figure and axes based on the zoom parameter
     if zoom:
-        fig, (ax2, ax1) = plt.subplots(1, 2, figsize=(18, 6), gridspec_kw={'width_ratios': [1, 5]})
+        fig, (ax2, ax1) = plt.subplots(1, 2, figsize=(18, 6), gridspec_kw={'width_ratios': [1, 5]}, num="Histogram of Time Stamps with Zoom")
+        ax1.set_yticklabels([])
+        ax1.tick_params(axis='y', left=False)
     else:
-        fig, ax1 = plt.subplots(1, 1, figsize=(12, 6))
+        fig, ax1 = plt.subplots(1, 1, figsize=(12, 6), num="Histogram of Time Stamps")
+        ax1.set_ylabel('Number of Time Stamps', color='black')
 
     # Convert time stamps from milliseconds to minutes
     minutes_since_start = (np.array(time_stamps) - time_stamps[0]) / 60000.0
@@ -126,17 +156,12 @@ def plot_histogram_and_average(time_stamps, counts, interval_minutes, max_interv
     average_hist_height = np.mean(hist[:-1])
 
     # Calculate the uncertainty as sqrt(N) for each bin
-    uncertainty = np.sqrt(hist[:-1])
+    uncertainty = np.sqrt(average_hist_height)
 
     # Plot the histogram of the number of time stamps
     color = 'tab:blue'
     ax1.hist(minutes_since_start, bins=bin_edges[:-1], edgecolor='black', alpha=0.7, label='Number of Time Stamps', color=color)
     ax1.set_xlabel('Time (minutes)')
-    #ax1.set_ylabel('Number of Time Stamps', color='black')
-    ax1.tick_params(axis='y', labelcolor=color)
-    ax1.set_yticklabels([])
-    ax1.tick_params(axis='y', left=False)
-
 
     # Plot the average height and uncertainty lines
     plot_uncertainty_lines(ax1, average_hist_height, uncertainty)
@@ -147,8 +172,8 @@ def plot_histogram_and_average(time_stamps, counts, interval_minutes, max_interv
 
     # Adjust y-axis limits if zoom is enabled
     if zoom:
-        upper = average_hist_height + zoom * np.mean(uncertainty)
-        lower = average_hist_height - zoom * np.mean(uncertainty)
+        upper = average_hist_height + zoom * uncertainty
+        lower = average_hist_height - zoom * uncertainty
         ax1.set_ylim(lower, upper)
         ax2.set_ylim(lower, upper)
 
@@ -165,10 +190,10 @@ def plot_uncertainty_lines(ax, average_height, uncertainty):
     """
     Plots the average height and uncertainty lines on the given axis.
     """
-    sdp1 = average_height + np.mean(uncertainty)
-    sdn1 = average_height - np.mean(uncertainty)
-    sdp2 = average_height + 2 * np.mean(uncertainty)
-    sdn2 = average_height - 2 * np.mean(uncertainty)
+    sdp1 = average_height + uncertainty
+    sdn1 = average_height - uncertainty
+    sdp2 = average_height + 2 * uncertainty
+    sdn2 = average_height - 2 * uncertainty
 
     ax.axhline(average_height, color='orange', label='Average Number of Time Stamps')
     ax.axhline(sdp1, color='orange', ls='--', lw=0.7)
@@ -192,10 +217,10 @@ def plot_projection(ax, unique_heights, counts, average_height, uncertainty, num
     ax.set_title('Projection of Bar Heights')
 
     # Plot the average height and uncertainty lines on the projection plot
-    sdp1 = average_height + np.mean(uncertainty)
-    sdn1 = average_height - np.mean(uncertainty)
-    sdp2 = average_height + 2 * np.mean(uncertainty)
-    sdn2 = average_height - 2 * np.mean(uncertainty)
+    sdp1 = average_height + uncertainty
+    sdn1 = average_height - uncertainty
+    sdp2 = average_height + 2 * uncertainty
+    sdn2 = average_height - 2 * uncertainty
 
     ax.axhline(average_height, color='orange')
     ax.axhline(sdp1, color='orange', ls='--', lw=0.7)
@@ -205,38 +230,42 @@ def plot_projection(ax, unique_heights, counts, average_height, uncertainty, num
 
 
 def find_min_and_count(time_since_last):
-    min_value = min(time_since_last)
-    count_min_value = time_since_last.count(min_value)
+    i = 0
+    while i < 20:
+        min_value = min(time_since_last) + i
+        count_min_value = time_since_last.count(min_value)
 
-    print(f"\nThe Geiger dead time is {min_value} and it appears {count_min_value} times in the list.")
+        print(f"\nThe Geiger dead time is {min_value} and it appears {count_min_value} times in the list.")
+        i += 1
 
 ### RUN ###
 
-file_path = 'Data/GeigerDataset_2024-05-11 09:18:27.155241.txt'
+file_path1 = 'Data/GeigerDataset_2024-05-11 09:18:27.155241.txt'
+file_path = 'Data/GeigerDataset_2024-05-24 09:31:24.691587.txt'
 
 # Extract values from the file
 counts, unix_time_stamps, peak_values, time_stamps, time_since_last = extract_values(file_path)
+_, _, _, _, time_since_last2 = extract_values(file_path1)
 
 # Analyze using the different methods
-analyze_parity(time_since_last)
-analyze_pair_parity(time_since_last)
+# analyze_parity(time_since_last)
+# analyze_pair_parity(time_since_last)
 analyze_intervals(time_since_last)
-analyze_intervals(time_since_last, 2)
+analyze_intervals(time_since_last2)
+# analyze_intervals(time_since_last, 2)
+# analyze_counts_parity(time_stamps, 12000)
 
 # Dead time
-find_min_and_count(time_since_last)
+# find_min_and_count(time_since_last)
 
 # Plot the histogram of peak values
-plot_histogram(peak_values)
+# plot_histogram(peak_values, 40)
 
 # Plot the histogram and average counts
-interval_minutes = 3
-max_interval = 374
-
-# Plot the histogram and average counts
-interval_minutes = 5
-max_interval = 374
-plot_histogram_and_average(time_stamps, counts, interval_minutes, max_interval, zoom=3)
+interval_minutes = 10
+max_interval = None
+# plot_histogram_and_average(time_stamps, counts, interval_minutes, max_interval, zoom=0)
+# plot_histogram_and_average(time_stamps, counts, interval_minutes, max_interval, zoom=3, num_bins=50)
 
 # Show plots
 plt.show()
