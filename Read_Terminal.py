@@ -11,8 +11,6 @@ from PyQt5.QtWidgets import QMessageBox
 from collections import deque
 from datetime import datetime as date
 
-#from MouseHover import CustomPlotWidget
-
 arduinoPort = "/dev/cu.usbmodemF412FA75E7882"
 # arduinoPort = "/dev/tty.usbmodem1101"
 
@@ -25,7 +23,7 @@ class SerialHistogram(QtWidgets.QWidget):
 
         self.maxXRangeExp = 1000  # Default max X-axis range
         self.numBinsExp = 20 # Default number of bins for Exp
-        self.timeIntervalPoisson = 600 # Default time interval for Poisson
+        self.timeIntervalPoisson = 730 # Default time interval for Poisson
         self.setupUi()
         self.setupSerial()
 
@@ -108,11 +106,11 @@ class SerialHistogram(QtWidgets.QWidget):
         self.poissonPlotWidget.showGrid(x=True, y=True)
         self.poissonPlotWidget.setBackground('#FFFFFF')
 
-        # # Button X-axis range
-        # self.changeXAxisButtonPoisson = QtWidgets.QPushButton("Change X-axis Range")
-        # self.poissonLayout.addWidget(self.changeXAxisButtonPoisson)
-        # self.changeXAxisButtonPoisson.setStyleSheet(button_style)
-        # self.changeXAxisButtonPoisson.clicked.connect(self.changeXAxisRangePoisson)
+        # Button X-axis range
+        self.changeXAxisButtonPoisson = QtWidgets.QPushButton("Change X-axis Range")
+        self.poissonLayout.addWidget(self.changeXAxisButtonPoisson)
+        self.changeXAxisButtonPoisson.setStyleSheet(button_style)
+        self.changeXAxisButtonPoisson.clicked.connect(self.changeXAxisRangePoisson)
 
         # Button number of bins
         self.changeBinsButtonPoisson = QtWidgets.QPushButton("Change Time Interval")
@@ -151,6 +149,8 @@ class SerialHistogram(QtWidgets.QWidget):
                     # Write data to file
                     self.writeDataToFile(peak, time_stamp, time_since_last_pulse)
 
+            self.file.flush() # Ensure data is written to disk
+
         except Exception as e:
             print(f"Error in getData: {e}")
 
@@ -163,7 +163,6 @@ class SerialHistogram(QtWidgets.QWidget):
         # Format: count; unix_time_seconds (s); peak (mV); time_stamp(μs); time_since_last_pulse (μs)
         line = f"{len(self.time_differences)} {current_time} {peak} {time_stamp} {time_since_last_pulse}\n"
         self.file.write(line)
-        self.file.flush() # Ensure data is written to disk
 
     def closeEvent(self, event):
         """Ensures the file is closed properly"""
@@ -176,7 +175,7 @@ class SerialHistogram(QtWidgets.QWidget):
         """Updates the exponential plot based on the collected time differences."""
         self.getData()
         if len(self.time_differences) > 0:
-            y, x = np.histogram(list(self.time_differences), bins=self.numBinsExp, range=(15, self.maxXRangeExp))
+            y, x = np.histogram(list(self.time_differences), bins=self.numBinsExp, range=(12, self.maxXRangeExp))
             self.exponentialPlotWidget.clear()
             self.exponentialPlotWidget.plot(x, y, stepMode=True, fillLevel=0, brush=pg.mkBrush('#374c80'))
 
@@ -230,11 +229,10 @@ class SerialHistogram(QtWidgets.QWidget):
             self.poissonPlotWidget.plot(bin_edges, count_frequencies, stepMode=True, fillLevel=0, brush=pg.mkBrush('#374c80'))
 
     def changeXAxisRangePoisson(self):
-        """Change the time interval size for the Poisson histogram based on user input."""
-        new_interval, ok = QtWidgets.QInputDialog.getInt(self, "Change Time Interval", "Enter new interval size (ms):", value=10000, min=1000, max=60000)
+        maxXRange, ok = QtWidgets.QInputDialog.getInt(self, "Change X-axis Range", "Enter new max X-axis value (ms):", value=self.maxXRangeExp, min=1, max=50)
         if ok:
-            self.intervalSizePoisson = new_interval
-            self.updatePoisson()  # Update histogram to reflect new interval size immediately
+            self.maxXRangeExp = maxXRange
+            self.updateExponential()  # Update histogram to reflect new X-axis range immediately
 
     def changeTimeIntervalPoisson(self):
         numBins, ok = QtWidgets.QInputDialog.getInt(self, "Change Poisson Time Interval", "Enter new time interval:", value=self.timeIntervalPoisson, min=10, max=20000)
